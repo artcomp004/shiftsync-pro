@@ -1,0 +1,104 @@
+.schedule-archive {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.schedule-archive h2 { font-size: 1.8rem; }
+.archive-subtitle { color: var(--text-secondary); font-size: 0.9rem; margin-top: -12px; }
+
+.archive-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  border-radius: 16px;
+  gap: 12px;
+  border: 1px dashed var(--border-strong);
+  color: var(--text-tertiary);
+}
+.archive-empty-icon { color: var(--border-strong); }
+.archive-empty h3 { color: var(--text-secondary); }
+
+.archive-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.archive-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 18px 22px;
+  border-radius: 14px;
+  border: 1px solid var(--border-subtle);
+  transition: all 0.2s;
+}
+.archive-card:hover { border-color: var(--text-tertiary); transform: translateY(-1px); }
+
+.archive-card-info {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.archive-cal-icon { color: var(--accent-primary); flex-shrink: 0; }
+.archive-card-info h4 { font-size: 1.05rem; margin: 0; }
+.archive-date { font-size: 0.78rem; color: var(--text-tertiary); display: block; }
+.archive-count { font-size: 0.75rem; color: var(--text-tertiary); }
+
+.archive-card-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Archive Table */
+.archive-view-grid { overflow-x: auto; }
+
+.archive-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.archive-table th,
+.archive-table td {
+  padding: 10px 12px;
+  border: 1px solid var(--border-subtle);
+  text-align: center;
+}
+
+.archive-table th {
+  background: rgba(255,255,255,0.03);
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.archive-shift-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-align: right !important;
+  white-space: nowrap;
+}
+.archive-shift-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.archive-def-name { font-weight: 600; display: block; font-size: 0.85rem; }
+.archive-def-hours { font-size: 0.7rem; color: var(--text-tertiary); }
+
+.archive-cell {
+  vertical-align: top;
+  min-width: 90px;
+}
+
+.archive-chip {
+  display: inline-block;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  font-size: 0.75rem;
+  margin: 2px;
+  font-weight: 500;
+}
