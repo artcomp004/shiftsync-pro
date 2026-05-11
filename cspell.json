@@ -1,0 +1,42 @@
+{
+  "version": "0.2",
+  "language": "en",
+  "words": [
+    "antigravity",
+    "shiftsync",
+    "supabase",
+    "lucide",
+    "vite",
+    "vitejs",
+    "jsx",
+    "rgba",
+    "hsla",
+    "signup",
+    "signin",
+    "dropdown",
+    "glassmorphism",
+    "clearfix",
+    "vercel",
+    "cspell",
+    "eslint",
+    "prettierrc",
+    "linebreak",
+    "mixins",
+    "vars",
+    "PGRST"
+  ],
+  "ignorePaths": [
+    "node_modules",
+    "dist",
+    "build",
+    "package-lock.json",
+    ".git",
+    ".vercel",
+    "*.css"
+  ],
+  "ignoreRegExpList": [
+    "/#[0-9a-fA-F]{3,8}/",
+    "/[\\u0590-\\u05FF\\uFB1D-\\uFB4F]+/g",
+    "/import .+ from .+/"
+  ]
+}

@@ -18,11 +18,12 @@ export default function Dashboard() {
   // ===== CALCULATIONS =====
   const stats = useMemo(() => {
     const weekAssignments = assignments.filter(a => a.weekKey === weekKey);
+    const wDays = getWeekDays(weekOffset);
 
     // Total required shift slots
     let totalSlots = 0;
     shiftDefs.forEach(def => {
-      weekDays.forEach(day => {
+      wDays.forEach(day => {
         if (getShiftForDay(def, day.idx)) totalSlots++;
       });
     });
@@ -64,7 +65,7 @@ export default function Dashboard() {
     // Unassigned shifts (cells with no worker)
     let unassigned = 0;
     shiftDefs.forEach(def => {
-      weekDays.forEach(day => {
+      wDays.forEach(day => {
         if (getShiftForDay(def, day.idx)) {
           const cellAssign = weekAssignments.filter(a => a.dayIdx === day.idx && a.shiftDefId === def.id);
           if (cellAssign.length === 0) unassigned++;
@@ -78,7 +79,7 @@ export default function Dashboard() {
     const unreadNotes = workerNotes.filter(n => !n.read).length;
 
     // Coverage heatmap data (per day)
-    const dailyCoverage = weekDays.map(day => {
+    const dailyCoverage = wDays.map(day => {
       let daySlots = 0;
       let dayFilled = 0;
       shiftDefs.forEach(def => {
@@ -103,7 +104,7 @@ export default function Dashboard() {
       pendingSwaps, weekRequests, unreadNotes,
       dailyCoverage, workerUtil
     };
-  }, [assignments, weekKey, employees, shiftDefs, weekDays, shiftRequests, swapRequests, workerNotes]);
+  }, [assignments, weekKey, weekOffset, employees, shiftDefs, shiftRequests, swapRequests, workerNotes]);
 
   const getCoverageColor = (rate) => {
     if (rate >= 100) return 'var(--success)';
@@ -296,6 +297,31 @@ export default function Dashboard() {
           </div>
         </div>
       </div>
+
+      {/* ===== RECENT WORKER NOTES ===== */}
+      {workerNotes.length > 0 && (
+        <div className="dash-notes-section glass-panel">
+          <h3>💬 הודעות אחרונות מעובדים</h3>
+          <div className="dash-notes-list">
+            {workerNotes.slice(0, 5).map(note => {
+              const emp = employees.find(e => e.id === note.empId);
+              return (
+                <div key={note.id} className={`dash-note-item ${note.read ? '' : 'unread'}`}>
+                  <div className="dash-note-avatar">{emp?.avatar || '?'}</div>
+                  <div className="dash-note-body">
+                    <div className="dash-note-header">
+                      <span className="dash-note-name">{note.empName || emp?.name || 'עובד'}</span>
+                      <span className="dash-note-time">{new Date(note.timestamp).toLocaleDateString('he-IL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                    <p className="dash-note-text">{note.text}</p>
+                  </div>
+                  {!note.read && <span className="dash-note-unread-dot" />}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

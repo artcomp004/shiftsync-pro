@@ -210,17 +210,22 @@ export function AppProvider({ children }) {
   if (initial.shiftDefs && initial.shiftDefs.length > 0 && !initial.shiftDefs[0].activeDays) {
     initial = { ...initial, shiftDefs: INITIAL_SHIFT_DEFS };
   }
-  // Migration: ensure internet evening shift (t9) has correct Friday/Saturday overrides
+  // Migration: ensure internet section only has 2 shifts (בוקר, ערב) and t9 has correct overrides
   if (initial.shiftDefs) {
-    initial = {
-      ...initial,
-      shiftDefs: initial.shiftDefs.map(d => {
+    const internetShifts = initial.shiftDefs.filter(d => d.section === 'internet');
+    if (internetShifts.length > 2) {
+      initial.shiftDefs = [
+        ...initial.shiftDefs.filter(d => d.section !== 'internet'),
+        ...INITIAL_SHIFT_DEFS.filter(d => d.section === 'internet')
+      ];
+    } else {
+      initial.shiftDefs = initial.shiftDefs.map(d => {
         if (d.id === 't9') {
           return { ...d, dayOverrides: { ...d.dayOverrides, 5: { hours: '12:00 - 22:00' }, 6: { hours: '00:00 - 15:00' } } };
         }
         return d;
-      })
-    };
+      });
+    }
   }
   // Migration: ensure shiftRequests exists
   if (!initial.shiftRequests) {

@@ -29,7 +29,7 @@ function App() {
   
   const isAdmin = auth.configured ? auth.isAdmin : currentUser?.role === 'admin';
 
-  const [activeTab, setActiveTab] = useState(isAdmin ? 'schedule' : 'my-schedule');
+  const [activeTab, setActiveTab] = useState('schedule');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Theme and Font Size effect
@@ -43,14 +43,22 @@ function App() {
     document.documentElement.style.fontSize = baseSize;
   }, [theme, state.fontSize]);
 
-  // Update tab when login state changes
+  // Update tab when login state changes — route to correct initial tab based on role
+  // Only redirect on initial login, not on every render
+  const hasRedirected = React.useRef(false);
   React.useEffect(() => {
-    if (isLoggedIn && currentUser) {
-      if (currentUser.role === 'admin' && activeTab === 'my-schedule') {
+    if (isLoggedIn && currentUser && !hasRedirected.current) {
+      hasRedirected.current = true;
+      if (currentUser.role === 'admin' && (activeTab === 'my-schedule')) {
         setActiveTab('schedule');
-      } else if (currentUser.role === 'worker' && activeTab === 'admin') {
+      } else if (currentUser.role === 'worker' && (activeTab === 'admin' || activeTab === 'dashboard' || activeTab === 'archive')) {
+        setActiveTab('my-schedule');
+      } else if (currentUser.role === 'worker' && activeTab === 'schedule') {
         setActiveTab('my-schedule');
       }
+    }
+    if (!isLoggedIn) {
+      hasRedirected.current = false;
     }
   }, [isLoggedIn, currentUser?.role]);
 

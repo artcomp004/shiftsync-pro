@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { ROLE_COLORS } from '../data/initialData';
-import { Send, Smile } from 'lucide-react';
+import { Send, Smile, SpellCheck, X } from 'lucide-react';
+import { checkText, autoCorrect, checkWord, getLastWord } from '../utils/hebrewSpellCheck';
 import './TeamChat.css';
 
 const EMOJI_LIST = ['😀','😂','❤️','👍','🔥','✅','⭐','💪','🎉','👋','📢','🙏','😊','💬','⚡'];
@@ -12,28 +13,88 @@ export default function TeamChat() {
 
   const [text, setText] = useState('');
   const [showEmoji, setShowEmoji] = useState(false);
+  const [spellErrors, setSpellErrors] = useState([]); // { index, original, cleanWord, suggestions }[]
+  const [activeSuggestion, setActiveSuggestion] = useState(null); // { wordIndex, rect?, suggestions }
+  const [spellEnabled, setSpellEnabled] = useState(true);
+  const [lastAutoCorrect, setLastAutoCorrect] = useState(null); // { original, corrected, timestamp }
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const spellTimerRef = useRef(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages.length]);
 
+  // ── Spell-check on text change (debounced) ───────────────────────────
+  const runSpellCheck = useCallback((value) => {
+    if (!spellEnabled || !value.trim()) {
+      setSpellErrors([]);
+      setActiveSuggestion(null);
+      return;
+    }
+    const errors = checkText(value);
+    setSpellErrors(errors);
+  }, [spellEnabled]);
+
+  useEffect(() => {
+    if (spellTimerRef.current) clearTimeout(spellTimerRef.current);
+    spellTimerRef.current = setTimeout(() => runSpellCheck(text), 300);
+    return () => clearTimeout(spellTimerRef.current);
+  }, [text, runSpellCheck]);
+
+  // ── Apply a suggestion ───────────────────────────────────────────────
+  const applySuggestion = (errorIdx, suggestion) => {
+    const words = text.split(/\s+/);
+    const error = spellErrors[errorIdx];
+    if (!error) return;
+    words[error.index] = words[error.index].replace(error.cleanWord, suggestion);
+    const newText = words.join(' ');
+    setText(newText);
+    setActiveSuggestion(null);
+    // Re-run spell check immediately
+    const errors = checkText(newText);
+    setSpellErrors(errors);
+    inputRef.current?.focus();
+  };
+
+  // ── Undo auto-correct ────────────────────────────────────────────────
+  const undoAutoCorrect = () => {
+    if (!lastAutoCorrect) return;
+    setText(lastAutoCorrect.original);
+    setLastAutoCorrect(null);
+    inputRef.current?.focus();
+  };
+
+  // ── Auto-correct before sending ──────────────────────────────────────
   const handleSend = () => {
     if (!text.trim()) return;
+
+    let finalText = text.trim();
+
+    // Auto-correct known typos before sending
+    if (spellEnabled) {
+      const corrected = autoCorrect(finalText);
+      if (corrected !== finalText) {
+        setLastAutoCorrect({ original: finalText, corrected, timestamp: Date.now() });
+        finalText = corrected;
+      }
+    }
+
     dispatch({
       type: 'ADD_CHAT_MESSAGE',
       payload: {
         id: `msg${Date.now()}`,
         userId: currentUser.id,
         userName: currentUser.name,
-        text: text.trim(),
+        text: finalText,
         timestamp: new Date().toISOString(),
         isAdmin: currentUser.role === 'admin'
       }
     });
     setText('');
     setShowEmoji(false);
+    setSpellErrors([]);
+    setActiveSuggestion(null);
     inputRef.current?.focus();
   };
 
@@ -41,6 +102,10 @@ export default function TeamChat() {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
+    }
+    // Escape dismisses suggestion popup
+    if (e.key === 'Escape') {
+      setActiveSuggestion(null);
     }
   };
 
@@ -59,14 +124,75 @@ export default function TeamChat() {
     return d.toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'long' });
   };
 
+  // ── Build highlighted text with error underlines ─────────────────────
+  const renderHighlightedText = () => {
+    if (!spellEnabled || spellErrors.length === 0 || !text) return null;
+
+    const words = text.split(/(\s+)/);
+    let wordIdx = 0;
+
+    return (
+      <div className="spell-highlight-overlay" aria-hidden="true">
+        {words.map((segment, i) => {
+          if (/^\s+$/.test(segment)) {
+            return <span key={i}>{segment}</span>;
+          }
+          const currentWordIdx = wordIdx;
+          wordIdx++;
+          const error = spellErrors.find(e => e.index === currentWordIdx);
+          if (error) {
+            return (
+              <span
+                key={i}
+                className="spell-error-word"
+                onClick={() => setActiveSuggestion(
+                  activeSuggestion?.wordIndex === currentWordIdx
+                    ? null
+                    : { wordIndex: currentWordIdx, errorIdx: spellErrors.indexOf(error) }
+                )}
+              >
+                {segment}
+              </span>
+            );
+          }
+          return <span key={i}>{segment}</span>;
+        })}
+      </div>
+    );
+  };
+
   // Group messages by date
   let lastDate = '';
+
+  // Clear auto-correct notification after 5 seconds
+  useEffect(() => {
+    if (lastAutoCorrect) {
+      const timer = setTimeout(() => setLastAutoCorrect(null), 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [lastAutoCorrect]);
 
   return (
     <div className="team-chat">
       <div className="chat-header glass-panel">
         <h3>💬 צ׳אט צוות</h3>
-        <span className="chat-member-count">{employees.filter(e => e.active).length} חברי צוות</span>
+        <div className="chat-header-actions">
+          <button
+            className={`spell-toggle-btn ${spellEnabled ? 'active' : ''}`}
+            onClick={() => {
+              setSpellEnabled(!spellEnabled);
+              if (!spellEnabled) {
+                setSpellErrors([]);
+                setActiveSuggestion(null);
+              }
+            }}
+            title={spellEnabled ? 'בדיקת איות פעילה' : 'בדיקת איות כבויה'}
+          >
+            <SpellCheck size={16} />
+            <span className="spell-toggle-label">{spellEnabled ? 'איות' : 'איות'}</span>
+          </button>
+          <span className="chat-member-count">{employees.filter(e => e.active).length} חברי צוות</span>
+        </div>
       </div>
 
       <div className="chat-messages">
@@ -113,6 +239,22 @@ export default function TeamChat() {
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Auto-correct notification banner */}
+      {lastAutoCorrect && (
+        <div className="autocorrect-banner">
+          <span className="autocorrect-icon">✨</span>
+          <span className="autocorrect-text">
+            תוקן: <strong>{lastAutoCorrect.original}</strong> → <strong>{lastAutoCorrect.corrected}</strong>
+          </span>
+          <button className="autocorrect-undo" onClick={undoAutoCorrect}>
+            ביטול
+          </button>
+          <button className="autocorrect-dismiss" onClick={() => setLastAutoCorrect(null)}>
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       <div className="chat-input-area glass-panel">
         {showEmoji && (
           <div className="emoji-picker">
@@ -121,6 +263,52 @@ export default function TeamChat() {
             ))}
           </div>
         )}
+
+        {/* Spell-check suggestion popup */}
+        {activeSuggestion !== null && spellErrors[activeSuggestion.errorIdx] && (
+          <div className="spell-suggestions-popup">
+            <div className="spell-suggestions-header">
+              <SpellCheck size={14} />
+              <span>הצעות תיקון עבור: <strong>{spellErrors[activeSuggestion.errorIdx].cleanWord}</strong></span>
+              <button className="spell-close-btn" onClick={() => setActiveSuggestion(null)}>
+                <X size={14} />
+              </button>
+            </div>
+            <div className="spell-suggestions-list">
+              {spellErrors[activeSuggestion.errorIdx].suggestions.map((sug, i) => (
+                <button
+                  key={i}
+                  className="spell-suggestion-btn"
+                  onClick={() => applySuggestion(activeSuggestion.errorIdx, sug)}
+                >
+                  {sug}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Inline error indicator */}
+        {spellEnabled && spellErrors.length > 0 && (
+          <div className="spell-error-bar">
+            <SpellCheck size={14} />
+            <span>
+              נמצאו {spellErrors.length} שגיאות איות —
+              {spellErrors.map((err, i) => (
+                <button
+                  key={i}
+                  className="spell-error-tag"
+                  onClick={() => setActiveSuggestion(
+                    activeSuggestion?.errorIdx === i ? null : { wordIndex: err.index, errorIdx: i }
+                  )}
+                >
+                  {err.cleanWord}
+                </button>
+              ))}
+            </span>
+          </div>
+        )}
+
         <div className="chat-input-row">
           <button className="chat-emoji-toggle" onClick={() => setShowEmoji(!showEmoji)}>
             <Smile size={20} />
@@ -128,6 +316,9 @@ export default function TeamChat() {
           <input
             ref={inputRef}
             type="text"
+            lang="he"
+            dir="rtl"
+            spellCheck={spellEnabled}
             placeholder="כתוב/י הודעה..."
             value={text}
             onChange={e => setText(e.target.value)}

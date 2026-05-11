@@ -3,9 +3,11 @@ import { useApp, getWeekKey } from '../context/AppContext';
 import { getWeekDays, getWeekLabel, getShiftForDay, ROLE_COLORS } from '../data/initialData';
 import { useToast } from './ui/Toast';
 import Modal from './ui/Modal';
+import html2canvas from 'html2canvas';
 import {
   ChevronRight, ChevronLeft, Sparkles, UserPlus, Printer, Send, Edit3, X,
-  Search, Lock, Unlock, Download, Layers, Palette, RefreshCw, ClipboardList
+  Search, Lock, Unlock, Download, Layers, Palette, RefreshCw, ClipboardList,
+  StickyNote, Trash2, Image, Save, Settings as SettingsIcon
 } from 'lucide-react';
 import './ScheduleGrid.css';
 
@@ -18,6 +20,8 @@ export default function ScheduleGrid() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [showAddWorker, setShowAddWorker] = useState(false);
   const [showShiftDefsEditor, setShowShiftDefsEditor] = useState(false);
+  const [showShiftPriorityEditor, setShowShiftPriorityEditor] = useState(false);
+  const [showWeeklySettings, setShowWeeklySettings] = useState(false);
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedQuotaEmp, setSelectedQuotaEmp] = useState(null);
@@ -29,6 +33,7 @@ export default function ScheduleGrid() {
   // Chip replace dropdown
   const [replaceDropdown, setReplaceDropdown] = useState(null); // { assignmentId, empId, dayIdx, shiftDefId, wk }
   const [replaceSearch, setReplaceSearch] = useState('');
+  const [quotaSearch, setQuotaSearch] = useState('');
 
   const gridRef = useRef(null);
   const [newWorker, setNewWorker] = useState({ name: '', email: '', phone: '', roles: ['שוטף'], quota: 5, eligibleShifts: [] });
@@ -44,21 +49,37 @@ export default function ScheduleGrid() {
 
   const getCellKey = (wk, dayIdx, shiftDefId) => `${wk}_${dayIdx}_${shiftDefId}`;
 
-  // Close dropdowns on outside click
+  // Custom events and close dropdowns on outside click
   useEffect(() => {
     const handler = (e) => {
-      if (!e.target.closest('.shift-dropdown-container') && !e.target.closest('.add-assignment-btn')) {
+      if (!e.target.closest('.shift-dropdown-container') && !e.target.closest('.add-assignment-btn') && !e.target.closest('.settings-dropdown-wrapper')) {
         setActiveDropdown(null);
       }
       if (!e.target.closest('.replace-dropdown-container') && !e.target.closest('.assigned-chip')) {
         setReplaceDropdown(null);
       }
     };
+    const handleOpenModal = (e) => {
+      if (e.detail === 'shiftDefs') setShowShiftDefsEditor(true);
+      if (e.detail === 'shiftPriority') setShowShiftPriorityEditor(true);
+      if (e.detail === 'weeklySettings') setShowWeeklySettings(true);
+    };
+
     document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
+    document.addEventListener('openModal', handleOpenModal);
+    return () => {
+      document.removeEventListener('mousedown', handler);
+      document.removeEventListener('openModal', handleOpenModal);
+    };
   }, []);
 
   // Keyboard shortcuts (Ctrl+S save, Ctrl+P print)
+  // Use refs for current values to avoid stale closures
+  const assignmentsRef = useRef(assignments);
+  assignmentsRef.current = assignments;
+  const cellNotesRef = useRef(cellNotes);
+  cellNotesRef.current = cellNotes;
+
   useEffect(() => {
     const handler = (e) => {
       if (e.ctrlKey && e.key === 's') { e.preventDefault(); handleSaveSchedule(); }
@@ -66,7 +87,7 @@ export default function ScheduleGrid() {
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [assignments]);
+  }, []);
 
   // --- Shift Need & Quota Calculation ---
   const activeEmployees = employees.filter(e => e.active);
@@ -131,6 +152,11 @@ export default function ScheduleGrid() {
           const info = getShiftForDay(def, day.idx);
           if (!info) return;
 
+          // Check if this cell is marked as holiday
+          const cellKey = `${weekKey}_${day.idx}_${def.id}`;
+          const currentNote = cellNotesRef.current[cellKey];
+          if (currentNote && (currentNote.text.includes('חג') || currentNote.text.includes('חופש'))) return;
+
           const eligibleWorkers = employees.filter(e => e.active && e.eligibleShifts.includes(def.id));
 
           // Score each worker (higher = better candidate)
@@ -178,6 +204,39 @@ export default function ScheduleGrid() {
   // Print: use native browser print with landscape A4
   const handlePrint = () => {
     window.print();
+  };
+
+  const handlePNGExport = async () => {
+    if (!gridRef.current) return;
+    toast('מייצר תמונה, אנא המתן...', 'info');
+    
+    try {
+      const canvas = await html2canvas(gridRef.current, {
+        backgroundColor: '#0f1115',
+        scale: 2,
+        useCORS: true,
+        logging: false,
+      });
+
+      // Use toBlob for reliable file downloads (toDataURL can fail on large canvases)
+      canvas.toBlob((blob) => {
+        if (!blob) { toast('שגיאה ביצירת התמונה', 'error'); return; }
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        const safeName = weekLabel.replace(/[^a-zA-Z0-9\u0590-\u05FF\- ]/g, '_');
+        link.download = `סידור_עבודה_${safeName}.png`;
+        link.href = url;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        // Release the blob URL after a short delay
+        setTimeout(() => URL.revokeObjectURL(url), 3000);
+        toast('התמונה נשמרה בהצלחה!', 'success');
+      }, 'image/png');
+    } catch (err) {
+      console.error(err);
+      toast('שגיאה ביצירת התמונה', 'error');
+    }
   };
 
   const handleCSVExport = () => {
@@ -316,18 +375,25 @@ export default function ScheduleGrid() {
     toast('הערה נשמרה', 'success');
   };
 
-  // Drag & Drop
+  // Drag & Drop — supports Ctrl+Drag to duplicate
   const handleDragStart = (e, assignment) => {
     if (isLocked) return;
-    setDragData(assignment);
-    e.dataTransfer.effectAllowed = 'move';
+    const isCopy = e.ctrlKey || e.metaKey;
+    setDragData({ ...assignment, _copy: isCopy });
+    e.dataTransfer.effectAllowed = isCopy ? 'copy' : 'move';
   };
-  const handleDragOver = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; e.currentTarget.classList.add('drag-over'); };
-  const handleDragLeave = (e) => { e.currentTarget.classList.remove('drag-over'); };
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = (e.ctrlKey || e.metaKey) ? 'copy' : 'move';
+    e.currentTarget.classList.add('drag-over');
+    e.currentTarget.classList.toggle('drag-copy', e.ctrlKey || e.metaKey);
+  };
+  const handleDragLeave = (e) => { e.currentTarget.classList.remove('drag-over', 'drag-copy'); };
   const handleDrop = (e, dayIdx, shiftDefId, wk) => {
     e.preventDefault();
-    e.currentTarget.classList.remove('drag-over');
+    e.currentTarget.classList.remove('drag-over', 'drag-copy');
     if (!dragData || isLocked) return;
+    const isCopy = e.ctrlKey || e.metaKey || dragData._copy;
     const emp = employees.find(ee => ee.id === dragData.empId);
     if (emp && !emp.eligibleShifts.includes(shiftDefId)) {
       toast(`${emp.name} לא יכול/ה לעבוד במשמרת זו`, 'warning');
@@ -337,13 +403,19 @@ export default function ScheduleGrid() {
       toast('העובד כבר משובץ כאן', 'warning');
       return;
     }
-    // If target cell already occupied by another worker, swap (remove existing)
-    const existingInTarget = assignments.find(a => a.dayIdx === dayIdx && a.shiftDefId === shiftDefId && a.weekKey === wk && a.id !== dragData.id);
-    if (existingInTarget) {
-      dispatch({ type: 'REMOVE_ASSIGNMENT', payload: existingInTarget.id });
-      toast('עובד הוחלף בגרירה!', 'success');
+    if (isCopy) {
+      // Ctrl+Drag: duplicate — create new assignment, keep original
+      dispatch({ type: 'ASSIGN_WORKER', payload: { id: `s${Date.now()}`, empId: dragData.empId, dayIdx, shiftDefId, weekKey: wk } });
+      toast(`${emp?.name} שוכפל/ה ליום אחר!`, 'success');
+    } else {
+      // Normal drag: move
+      const existingInTarget = assignments.find(a => a.dayIdx === dayIdx && a.shiftDefId === shiftDefId && a.weekKey === wk && a.id !== dragData.id);
+      if (existingInTarget) {
+        dispatch({ type: 'REMOVE_ASSIGNMENT', payload: existingInTarget.id });
+        toast('עובד הוחלף בגרירה!', 'success');
+      }
+      dispatch({ type: 'MOVE_ASSIGNMENT', payload: { assignmentId: dragData.id, toDayIdx: dayIdx, toShiftDefId: shiftDefId } });
     }
-    dispatch({ type: 'MOVE_ASSIGNMENT', payload: { assignmentId: dragData.id, toDayIdx: dayIdx, toShiftDefId: shiftDefId } });
     setDragData(null);
   };
 
@@ -358,12 +430,12 @@ export default function ScheduleGrid() {
 
   // ===== RENDER SHIFT ROW =====
   const renderShiftRow = (def, days, wk) => (
-    <div key={`${def.id}_${wk}`} className="grid-shift-row" style={{ gridTemplateColumns: `140px repeat(${days.length}, minmax(120px, 1fr))` }}>
+    <div key={`${def.id}_${wk}`} className="grid-shift-row" style={{ gridTemplateColumns: `140px repeat(${days.length}, 1fr)` }}>
       {/* Shift label cell */}
-      <div className="grid-cell shift-def-cell">
+      <div className="grid-cell shift-def-cell" style={{ '--shift-color': def.color || '#3b82f6', background: (def.color || '#3b82f6') + '28', borderRight: `3px solid ${def.color || '#3b82f6'}` }}>
         <div className="def-color-dot" style={{ background: def.color || '#3b82f6' }}></div>
-        <div>
-          <span className="def-name">{def.name}</span>
+        <div style={{ textAlign: 'center' }}>
+          <span className="def-name" style={{ color: def.color || '#3b82f6' }}>{def.name}</span>
           <span className="def-hours">{def.hours}</span>
         </div>
       </div>
@@ -417,7 +489,7 @@ export default function ScheduleGrid() {
                       draggable={isAdmin && !isLocked}
                       onDragStart={(e) => handleDragStart(e, assignment)}
                       onClick={() => isAdmin && !isLocked ? openReplaceDropdown(assignment) : null}
-                      title={`${emp.name} • לחץ להחלפה`}
+                      title={`${emp.name} • ${isAdmin && !isLocked ? 'לחץ להחלפה' : ''}`}
                     >
                       <div className="chip-color-bar" style={{ background: ROLE_COLORS[emp.roles?.[0]] || '#3b82f6' }}></div>
                       <span className="chip-name">{emp.name}</span>
@@ -462,8 +534,18 @@ export default function ScheduleGrid() {
               {isAdmin && !isLocked && cellAssign.length === 0 && (
                 <button className="add-btn-inline" onClick={() => toggleDropdown(day.idx, def.id, wk)} title="שיבוץ עובד">+</button>
               )}
+              {/* Cell note button — admin only */}
+              {isAdmin && (
+                <button
+                  className={`cell-note-btn ${note?.text ? 'has-note' : ''}`}
+                  onClick={(e) => { e.stopPropagation(); handleCellNoteOpen(day.idx, def.id, wk); }}
+                  title={note?.text || 'הוסף הערה'}
+                >
+                  <StickyNote size={11} />
+                </button>
+              )}
               {/* Add worker dropdown */}
-              {isDropOpen && (
+              {isDropOpen && isAdmin && (
                 <div className="shift-dropdown-container glass-panel">
                   <div className="dropdown-search">
                     <Search size={13} />
@@ -521,71 +603,44 @@ export default function ScheduleGrid() {
 
   return (
     <div className="schedule-planner">
-      {/* Management Summary */}
-      {renderManagementSummary()}
-
-      {/* Top Action Bar */}
+      {/* Action buttons strip */}
       <div className="planner-header no-print">
-        <div className="week-navigation glass-panel">
-          <button className="icon-btn" onClick={() => dispatch({ type: 'SET_WEEK_OFFSET', payload: weekOffset + 1 })}>
-            <ChevronRight size={20} />
-          </button>
-          <div className="current-week">
-            {isLocked && <Lock size={14} className="lock-inline" />}
-            <span className="week-label">{weekLabel}</span>
+        {isAdmin && (
+          <div className="planner-row planner-row-buttons" style={{ position: 'relative' }}>
+            <button className="btn-secondary" onClick={handleSaveSchedule}>
+              <Save size={13} /> <span>שמור</span>
+            </button>
+            <button className={`btn-lock ${isLocked ? 'locked' : ''}`} onClick={() => { dispatch({ type: 'TOGGLE_LOCK' }); toast(isLocked ? 'הסידור נפתח' : 'הסידור ננעל!', isLocked ? 'success' : 'warning'); }}>
+              {isLocked ? <Lock size={13} /> : <Unlock size={13} />}
+              <span>נעילה</span>
+            </button>
+            <button
+              className={`btn-primary ai-generate-btn ${isGenerating ? 'generating' : ''}`}
+              onClick={handleAutoSchedule}
+              disabled={isGenerating || isLocked}
+            >
+              <Sparkles size={13} className="ai-icon" />
+              <span>{isGenerating ? 'מחשב...' : 'שיבוץ AI'}</span>
+            </button>
+            <button className="btn-secondary" onClick={handlePrint}>
+              <Printer size={13} /> <span>הדפס A4</span>
+            </button>
+            <button className="btn-secondary" onClick={handlePNGExport}>
+              <Image size={13} /> <span>הורד PNG</span>
+            </button>
+            <button className="btn-secondary btn-danger-subtle" onClick={() => {
+              if (confirm('בטוח למחוק את כל השיבוצים לשבוע הנוכחי?')) {
+                const remaining = assignments.filter(a => a.weekKey !== weekKey);
+                dispatch({ type: 'SET_ASSIGNMENTS', payload: remaining });
+                toast('כל השיבוצים לשבוע נמחקו', 'warning');
+              }
+            }} disabled={isLocked}>
+              <Trash2 size={13} /> <span>נקה שבוע</span>
+            </button>
           </div>
-          <button className="icon-btn" onClick={() => dispatch({ type: 'SET_WEEK_OFFSET', payload: weekOffset - 1 })}>
-            <ChevronLeft size={20} />
-          </button>
-        </div>
-
-        <div className="planner-actions">
-          {isAdmin && (
-            <>
-              <button className={`btn-lock ${isLocked ? 'locked' : ''}`} onClick={() => { dispatch({ type: 'TOGGLE_LOCK' }); toast(isLocked ? 'הסידור נפתח' : 'הסידור ננעל!', isLocked ? 'success' : 'warning'); }}>
-                {isLocked ? <Lock size={16} /> : <Unlock size={16} />}
-                <span>{isLocked ? 'נעול 🔒' : 'נעילה'}</span>
-              </button>
-              <button className="btn-secondary" onClick={() => setShowShiftDefsEditor(true)}>
-                <Edit3 size={16} /> <span>הגדרת משמרות</span>
-              </button>
-              <button className="btn-secondary" onClick={() => setShowAddWorker(true)}>
-                <UserPlus size={16} /> <span>הוסף עובד</span>
-              </button>
-              <button className="btn-secondary" onClick={() => dispatch({ type: 'TOGGLE_MULTI_WEEK' })}>
-                <Layers size={16} /> <span>{multiWeek ? 'שבוע 1' : '2 שבועות'}</span>
-              </button>
-              <button className={`btn-secondary ${showShiftRequestsPanel ? 'active-toggle' : ''}`} onClick={() => setShowShiftRequestsPanel(!showShiftRequestsPanel)}>
-                <ClipboardList size={16} /> <span>בקשות</span>
-                {shiftRequests.filter(r => r.weekKey === weekKey).length > 0 && <span className="req-count-badge">{shiftRequests.filter(r => r.weekKey === weekKey).length}</span>}
-              </button>
-            </>
-          )}
-          <button className="btn-secondary" onClick={handlePrint}>
-            <Printer size={16} /> <span>הדפס A4</span>
-          </button>
-          <button className="btn-secondary" onClick={handleCSVExport}>
-            <Download size={16} /> <span>CSV</span>
-          </button>
-          {isAdmin && (
-            <>
-              <button className="btn-secondary" onClick={handleSaveSchedule}>
-                <Send size={16} /> <span>שמור</span>
-              </button>
-              <button
-                className={`btn-primary ai-generate-btn ${isGenerating ? 'generating' : ''}`}
-                onClick={handleAutoSchedule}
-                disabled={isGenerating || isLocked}
-              >
-                <Sparkles size={16} className="ai-icon" />
-                <span>{isGenerating ? 'מחשב...' : 'שיבוץ AI'}</span>
-              </button>
-            </>
-          )}
-        </div>
+        )}
       </div>
 
-      {/* Quota Bar — wraps in 2-3 lines */}
       <div className="quota-bar-container glass-panel no-print">
         {employees.filter(e => e.active).map(emp => {
           const count = getWorkerShiftCount(emp.id);
@@ -654,15 +709,6 @@ export default function ScheduleGrid() {
                 );
               })}
             </div>
-            <div className="qd-eligible">
-              <h5>משמרות מורשות:</h5>
-              <div className="qd-eligible-tags">
-                {emp.eligibleShifts.map(sid => {
-                  const def = shiftDefs.find(d => d.id === sid);
-                  return def ? <span key={sid} className="qd-tag" style={{ borderColor: def.color }}>{def.name}</span> : null;
-                })}
-              </div>
-            </div>
             {/* Worker Notes & Shift Request Comments */}
             {(() => {
               const notes = workerNotes.filter(n => n.empId === emp.id);
@@ -726,6 +772,7 @@ export default function ScheduleGrid() {
                 <thead>
                   <tr>
                     <th>עובד</th>
+                    <th>מכסה מבוקשת</th>
                     <th>יום חסום</th>
                     <th>מעדיף/ה לא</th>
                     <th>הערה</th>
@@ -739,6 +786,9 @@ export default function ScheduleGrid() {
                         <td className="srp-emp-name">
                           <div className="srp-avatar" style={{ borderColor: ROLE_COLORS[reqEmp?.roles?.[0]] || '#3b82f6' }}>{reqEmp?.avatar}</div>
                           {reqEmp?.name || '?'}
+                        </td>
+                        <td className="srp-quota">
+                          <span className="srp-quota-badge">{req.requestedQuota ?? reqEmp?.quota ?? '—'}</span>
                         </td>
                         <td className="srp-blocked">
                           {req.blockedDay !== null && req.blockedDay !== undefined
@@ -783,7 +833,7 @@ export default function ScheduleGrid() {
         </div>
 
         {/* Header Row */}
-        <div className="grid-shift-header-row" style={{ gridTemplateColumns: `140px repeat(${weekDays.length}, minmax(120px, 1fr))` }}>
+        <div className="grid-shift-header-row" style={{ gridTemplateColumns: `140px repeat(${weekDays.length}, 1fr)` }}>
           <div className="grid-cell time-col-header">משמרות</div>
           {weekDays.map(day => (
             <div key={day.idx} className="grid-cell day-header-cell">
@@ -795,7 +845,7 @@ export default function ScheduleGrid() {
 
         {/* Grid Body */}
         <div className="grid-shift-body">
-          {mainShifts.length > 0 && <div className="section-label"><span>משמרות ראשיות</span></div>}
+          {mainShifts.length > 0 && <div className="section-label gentle-label"><span>שוטף</span></div>}
           {mainShifts.map(def => renderShiftRow(def, weekDays, weekKey))}
 
           {internetShifts.length > 0 && <div className="section-label internet-section"><span>אינטרנט</span></div>}
@@ -861,6 +911,96 @@ export default function ScheduleGrid() {
         </Modal>
       )}
 
+      {showWeeklySettings && (
+        <Modal title="עדכון משמרות שבועי" onClose={() => setShowWeeklySettings(false)} width="480px">
+          <div className="modal-form">
+            <h4 style={{ margin: '0 0 10px', fontSize: '1rem' }}>עדכון מכסת עובדים קבועים</h4>
+            <p className="modal-text" style={{ fontSize: '0.85rem' }}>עדכן את המכסה השבועית לעובדים קבועים (שמוגדרים כעת עם 5 משמרות).</p>
+            <div style={{ display: 'flex', gap: '8px', alignItems: 'flex-end', marginBottom: '24px', background: 'var(--bg-elevated)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>מכסה חדשה לשבוע זה:</label>
+                <input type="number" id="weekly-quota-input" defaultValue={5} min={1} max={10} style={{ width: '100%', marginTop: '4px' }} />
+              </div>
+              <button className="btn-primary" onClick={() => {
+                const newQuota = parseInt(document.getElementById('weekly-quota-input').value, 10);
+                let updated = 0;
+                employees.forEach(emp => {
+                  // Target regular workers (שוטף) or those who currently have a standard quota (e.g., 4-6)
+                  if (emp.roles?.includes('שוטף') || (emp.quota >= 4 && emp.quota <= 6)) {
+                    if (emp.quota !== newQuota) {
+                      dispatch({ type: 'UPDATE_EMPLOYEE', payload: { id: emp.id, quota: newQuota } });
+                      updated++;
+                    }
+                  }
+                });
+                toast(`עודכנה מכסה ל-${updated} עובדים`, 'success');
+              }}>עדכן מכסה</button>
+            </div>
+
+            <h4 style={{ margin: '0 0 10px', fontSize: '1rem' }}>ימי חופש וחג השבוע</h4>
+            <p className="modal-text" style={{ fontSize: '0.85rem' }}>בחר יום להגדיר כחג/חופש. זה ימחק את כל השיבוצים לאותו יום ויוסיף הערה "חג/חופש".</p>
+            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap', background: 'var(--bg-elevated)', padding: '12px', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+              {weekDays.map(day => (
+                <button key={day.idx} className="btn-secondary" style={{ flex: '1 1 calc(33% - 8px)', justifyContent: 'center' }} onClick={() => {
+                  if (confirm(`להגדיר את ${day.label} כיום חג? כל השיבוצים ביום זה ימחקו.`)) {
+                    // Remove assignments
+                    const remaining = assignments.filter(a => !(a.weekKey === weekKey && a.dayIdx === day.idx));
+                    dispatch({ type: 'SET_ASSIGNMENTS', payload: remaining });
+                    
+                    // Add cell notes
+                    shiftDefs.forEach(def => {
+                      const cellKey = `${weekKey}_${day.idx}_${def.id}`;
+                      dispatch({ type: 'SET_CELL_NOTE', payload: { cellKey, text: 'חג/חופש', color: '#ef4444' } });
+                    });
+                    toast(`הוגדר חג ב-${day.label}`, 'success');
+                  }
+                }}>
+                  {day.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="modal-actions" style={{ marginTop: '20px' }}>
+            <button className="btn-secondary" onClick={() => setShowWeeklySettings(false)}>סיום</button>
+          </div>
+        </Modal>
+      )}
+      {showShiftPriorityEditor && (
+        <Modal title="תיעדוף משמרות" onClose={() => setShowShiftPriorityEditor(false)} width="480px">
+          <p className="modal-text">סדר היררכי של המשמרות. השיבוץ האוטומטי (AI) ימלא את המשמרות לפי הסדר הזה מלמעלה למטה.</p>
+          <div className="def-editor-list" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {shiftDefs.map((def, index) => (
+              <div key={def.id} className="glass-panel" style={{ display: 'flex', alignItems: 'center', padding: '8px 12px', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: def.color || '#3b82f6' }} />
+                  <span style={{ fontWeight: '600' }}>{def.name}</span>
+                  <span style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{def.section === 'main' ? 'ראשי' : 'אינטרנט'}</span>
+                </div>
+                <div style={{ display: 'flex', gap: '4px' }}>
+                  <button className="icon-btn" disabled={index === 0} onClick={() => {
+                    const newDefs = [...shiftDefs];
+                    const temp = newDefs[index - 1];
+                    newDefs[index - 1] = newDefs[index];
+                    newDefs[index] = temp;
+                    dispatch({ type: 'SET_SHIFT_DEFS', payload: newDefs });
+                  }}>↑</button>
+                  <button className="icon-btn" disabled={index === shiftDefs.length - 1} onClick={() => {
+                    const newDefs = [...shiftDefs];
+                    const temp = newDefs[index + 1];
+                    newDefs[index + 1] = newDefs[index];
+                    newDefs[index] = temp;
+                    dispatch({ type: 'SET_SHIFT_DEFS', payload: newDefs });
+                  }}>↓</button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="modal-actions" style={{ marginTop: '16px' }}>
+            <button className="btn-primary" onClick={() => setShowShiftPriorityEditor(false)}>סיום</button>
+          </div>
+        </Modal>
+      )}
+
       {showAddWorker && (
         <Modal title="הוספת עובד חדש" onClose={() => setShowAddWorker(false)} width="480px">
           <form onSubmit={handleAddWorkerSubmit} className="modal-form">
@@ -872,22 +1012,6 @@ export default function ScheduleGrid() {
             <input type="tel" value={newWorker.phone} onChange={e => setNewWorker({ ...newWorker, phone: e.target.value })} />
             <label>מכסה שבועית:</label>
             <input type="number" value={newWorker.quota} onChange={e => setNewWorker({ ...newWorker, quota: e.target.value })} min="1" max="21" />
-            <label>משמרות מורשות:</label>
-            <div className="eligible-checkboxes">
-              {shiftDefs.map(d => (
-                <label key={d.id} className="eligible-check-item">
-                  <input
-                    type="checkbox"
-                    checked={newWorker.eligibleShifts.includes(d.id)}
-                    onChange={e => {
-                      if (e.target.checked) setNewWorker({ ...newWorker, eligibleShifts: [...newWorker.eligibleShifts, d.id] });
-                      else setNewWorker({ ...newWorker, eligibleShifts: newWorker.eligibleShifts.filter(x => x !== d.id) });
-                    }}
-                  />
-                  <span style={{ color: d.color }}>{d.name}</span>
-                </label>
-              ))}
-            </div>
             <div className="modal-actions">
               <button type="button" className="btn-secondary" onClick={() => setShowAddWorker(false)}>ביטול</button>
               <button type="submit" className="btn-primary">שמור עובד</button>

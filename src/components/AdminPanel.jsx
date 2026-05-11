@@ -3,13 +3,13 @@ import { useApp } from '../context/AppContext';
 import { useToast } from './ui/Toast';
 import Modal from './ui/Modal';
 import { ROLES, ROLE_COLORS } from '../data/initialData';
-import { Users, Edit3, Trash2, Plus, Check, X, AlertTriangle, UserCheck, UserX, Mail, Phone } from 'lucide-react';
+import { Users, Edit3, Trash2, Plus, Check, X, AlertTriangle, UserCheck, UserX, Mail, Phone, Search } from 'lucide-react';
 import './AdminPanel.css';
 
 export default function AdminPanel() {
   const { state, dispatch, weekKey, getWorkerShiftCount } = useApp();
   const toast = useToast();
-  const { employees, assignments, swapRequests, shiftDefs, weekOffset } = state;
+  const { employees = [], assignments = [], swapRequests = [], shiftDefs = [], weekOffset } = state;
 
   const [editingEmp, setEditingEmp] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -17,19 +17,21 @@ export default function AdminPanel() {
   const [newEmp, setNewEmp] = useState({ name: '', email: '', phone: '', roles: ['שוטף'], quota: 5, eligibleShifts: [] });
   const [filterRole, setFilterRole] = useState('all');
   const [sortBy, setSortBy] = useState('name');
+  const [searchName, setSearchName] = useState('');
 
   // Stats
   const activeEmps = employees.filter(e => e.active);
   const totalAssigned = assignments.filter(a => a.weekKey === weekKey).length;
-  const belowQuota = activeEmps.filter(e => getWorkerShiftCount(e.id) < e.quota);
-  const aboveQuota = activeEmps.filter(e => getWorkerShiftCount(e.id) > e.quota);
+  const belowQuota = activeEmps.filter(e => getWorkerShiftCount(e.id) < (e.quota || 0));
+  const aboveQuota = activeEmps.filter(e => getWorkerShiftCount(e.id) > (e.quota || 0));
   const pendingSwaps = swapRequests.filter(r => r.status === 'pending');
 
   const filteredEmps = employees
-    .filter(e => filterRole === 'all' || e.roles.includes(filterRole))
+    .filter(e => filterRole === 'all' || (e.roles || []).includes(filterRole))
+    .filter(e => searchName === '' || (e.name || '').toLowerCase().includes(searchName.toLowerCase()) || (e.email && e.email.toLowerCase().includes(searchName.toLowerCase())) || (e.phone && e.phone.includes(searchName)))
     .sort((a, b) => {
-      if (sortBy === 'name') return a.name.localeCompare(b.name);
-      if (sortBy === 'quota') return b.quota - a.quota;
+      if (sortBy === 'name') return (a.name || '').localeCompare(b.name || '');
+      if (sortBy === 'quota') return (b.quota || 0) - (a.quota || 0);
       if (sortBy === 'shifts') return getWorkerShiftCount(b.id) - getWorkerShiftCount(a.id);
       return 0;
     });
@@ -69,7 +71,7 @@ export default function AdminPanel() {
         email: newEmp.email,
         phone: newEmp.phone,
         roles: newEmp.roles,
-        eligibleShifts: newEmp.eligibleShifts.length > 0 ? newEmp.eligibleShifts : shiftDefs.map(d => d.id),
+        eligibleShifts: shiftDefs.map(d => d.id),
         avatar: newEmp.name.charAt(0),
         quota: parseInt(newEmp.quota) || 5,
         active: true
@@ -162,6 +164,15 @@ export default function AdminPanel() {
       {/* Employee Table Controls */}
       <div className="emp-table-controls">
         <div className="emp-filters">
+          <div className="emp-search-box">
+            <Search size={14} />
+            <input
+              type="text"
+              placeholder="חיפוש עובד..."
+              value={searchName}
+              onChange={e => setSearchName(e.target.value)}
+            />
+          </div>
           <select value={filterRole} onChange={e => setFilterRole(e.target.value)} className="filter-select">
             <option value="all">כל התפקידים</option>
             {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
@@ -205,7 +216,7 @@ export default function AdminPanel() {
                   </td>
                   <td>
                     <div className="role-tags">
-                      {emp.roles.map(r => (
+                      {(emp.roles || []).map(r => (
                         <span key={r} className="role-tag" style={{ color: ROLE_COLORS[r], borderColor: ROLE_COLORS[r] }}>{r}</span>
                       ))}
                     </div>
@@ -273,24 +284,6 @@ export default function AdminPanel() {
                 </label>
               ))}
             </div>
-            <label>משמרות מורשות:</label>
-            <div className="eligible-checkboxes">
-              {shiftDefs.map(d => (
-                <label key={d.id} className="eligible-check-item">
-                  <input
-                    type="checkbox"
-                    checked={editingEmp.eligibleShifts?.includes(d.id)}
-                    onChange={e => {
-                      const shifts = e.target.checked
-                        ? [...(editingEmp.eligibleShifts || []), d.id]
-                        : (editingEmp.eligibleShifts || []).filter(x => x !== d.id);
-                      setEditingEmp({ ...editingEmp, eligibleShifts: shifts });
-                    }}
-                  />
-                  <span style={{ color: d.color }}>{d.name}</span>
-                </label>
-              ))}
-            </div>
             <div className="modal-actions">
               <button className="btn-secondary" onClick={() => setEditingEmp(null)}>ביטול</button>
               <button className="btn-primary" onClick={handleSaveEdit}>שמור שינויים</button>
@@ -311,22 +304,6 @@ export default function AdminPanel() {
             <input type="tel" value={newEmp.phone} onChange={e => setNewEmp({ ...newEmp, phone: e.target.value })} />
             <label>מכסה שבועית:</label>
             <input type="number" value={newEmp.quota} onChange={e => setNewEmp({ ...newEmp, quota: e.target.value })} min="1" max="21" />
-            <label>משמרות מורשות:</label>
-            <div className="eligible-checkboxes">
-              {shiftDefs.map(d => (
-                <label key={d.id} className="eligible-check-item">
-                  <input
-                    type="checkbox"
-                    checked={newEmp.eligibleShifts.includes(d.id)}
-                    onChange={e => {
-                      if (e.target.checked) setNewEmp({ ...newEmp, eligibleShifts: [...newEmp.eligibleShifts, d.id] });
-                      else setNewEmp({ ...newEmp, eligibleShifts: newEmp.eligibleShifts.filter(x => x !== d.id) });
-                    }}
-                  />
-                  <span style={{ color: d.color }}>{d.name}</span>
-                </label>
-              ))}
-            </div>
             <div className="modal-actions">
               <button type="button" className="btn-secondary" onClick={() => setShowAddModal(false)}>ביטול</button>
               <button type="submit" className="btn-primary">שמור עובד</button>

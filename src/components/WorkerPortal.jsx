@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useApp, getWeekKey } from '../context/AppContext';
 import { useToast } from './ui/Toast';
 import Modal from './ui/Modal';
@@ -9,24 +9,38 @@ import {
 } from 'lucide-react';
 import './WorkerPortal.css';
 
+// Fixed 3 shift slots for the reservation table
+// Map to approximate shiftDef IDs so admin panel can cross-reference
+const RESERVATION_SLOTS = [
+  { id: 'morning', name: 'בוקר', hours: '05:00 - 12:00', color: '#f59e0b', shiftDefIds: ['t1', 't2', 't3', 't8'] },
+  { id: 'noon',    name: 'צוהרים', hours: '12:00 - 21:00', color: '#3b82f6', shiftDefIds: ['t4', 't5', 't6'] },
+  { id: 'evening', name: 'ערב', hours: '15:00 - 00:00', color: '#8b5cf6', shiftDefIds: ['t7', 't9'] },
+];
+
+const DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+
 export default function WorkerPortal() {
-  const { state, dispatch, weekKey, getWorkerShiftCount } = useApp();
+  const { state, dispatch, weekKey } = useApp();
   const toast = useToast();
   const { currentUser, employees, shiftDefs, assignments, isLocked, swapRequests, weekOffset } = state;
 
   const emp = employees.find(e => e.id === currentUser?.id);
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState('my-shifts'); // 'my-shifts' | 'my-requests'
 
   const [showSwapModal, setShowSwapModal] = useState(null);
   const [swapReason, setSwapReason] = useState('');
   const [noteText, setNoteText] = useState('');
   const [noteSending, setNoteSending] = useState(false);
 
-  // New Request Form State
+  // Request Form State
   const [blockedDay, setBlockedDay] = useState(null);
-  const [preferNot, setPreferNot] = useState([]); // Array of {dayIdx, shiftDefId}
+  const [blockedSlots, setBlockedSlots] = useState([]);
   const [requestComment, setRequestComment] = useState('');
   const [requestSending, setRequestSending] = useState(false);
-  const [requestedQuota, setRequestedQuota] = useState(emp?.quota ?? 5);
+  const [requestedQuota, setRequestedQuota] = useState(5);
+
   if (!emp) return <div className="worker-portal"><h2>עובד לא נמצא</h2></div>;
 
   const weekDays = getWeekDays(weekOffset);
@@ -34,30 +48,43 @@ export default function WorkerPortal() {
   const myShifts = assignments.filter(a => a.empId === emp.id && a.weekKey === weekKey);
   const myRequests = swapRequests.filter(r => r.empId === emp.id);
   const shiftCount = myShifts.length;
-  const remaining = emp.quota - shiftCount;
 
-  // ===== Self-Schedule: Build available shift table =====
-  // For each shift def the worker is eligible for, show which days are open (active + not locked + worker not already there)
-  const eligibleDefs = shiftDefs.filter(d => emp.eligibleShifts.includes(d.id));
+  const MAX_SHIFTS = emp.quota || 5;
+  const MAX_BLOCKED_SLOTS = 2;
 
-  const isAlreadyAssigned = (shiftDefId, dayIdx) =>
-    assignments.some(a => a.empId === emp.id && a.shiftDefId === shiftDefId && a.dayIdx === dayIdx && a.weekKey === weekKey);
+  // Reset blocked state when week changes
+  React.useEffect(() => {
+    const existing = state.shiftRequests.find(r => r.empId === emp.id && r.weekKey === weekKey);
+    if (existing) {
+      setBlockedDay(existing.blockedDay ?? null);
+      setBlockedSlots(existing.blockedSlots || []);
+      setRequestComment(existing.comment || '');
+      setRequestedQuota(existing.requestedQuota ?? emp.quota ?? 5);
+    } else {
+      setBlockedDay(null);
+      setBlockedSlots([]);
+      setRequestComment('');
+      setRequestedQuota(emp.quota || 5);
+    }
+  }, [weekKey, emp.id]);
 
-  const hasDayConflict = (dayIdx) =>
-    assignments.some(a => a.empId === emp.id && a.dayIdx === dayIdx && a.weekKey === weekKey);
+  // ===== Dynamic availability count =====
+  // Count how many day-slots are available (not blocked by worker)
+  const totalSlots = 7 * 3;
+  const blockedDaySlots = blockedDay !== null ? 3 : 0;
+  const availableSlots = totalSlots - blockedDaySlots - blockedSlots.length;
+  // Count available DAYS (days that have at least 1 open slot)
+  const availableDays = weekDays.filter(d => {
+    if (blockedDay === d.idx) return false;
+    const blockedInDay = blockedSlots.filter(s => s.dayIdx === d.idx).length;
+    return blockedInDay < 3; // At least 1 slot open
+  }).length;
 
-  const handleSelfAssign = (shiftDefId, dayIdx) => {
-    if (isLocked) { toast('הסידור נעול', 'warning'); return; }
-    if (remaining <= 0) { toast('הגעת למכסה השבועית שלך!', 'warning'); return; }
-    if (isAlreadyAssigned(shiftDefId, dayIdx)) { toast('כבר רשום/ה למשמרת זו', 'warning'); return; }
-    if (hasDayConflict(dayIdx)) { toast('כבר יש לך משמרת ביום זה', 'warning'); return; }
-    dispatch({ type: 'ASSIGN_WORKER', payload: { id: `s${Date.now()}`, empId: emp.id, dayIdx, shiftDefId, weekKey } });
-    dispatch({
-      type: 'ADD_NOTIFICATION',
-      payload: { id: `n${Date.now()}`, text: `${emp.name} נרשם/ה למשמרת ${shiftDefs.find(d => d.id === shiftDefId)?.name || ''} יום ${['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'][dayIdx]}`, type: 'info', timestamp: new Date().toISOString(), read: false }
-    });
-    toast('נרשמת למשמרת!', 'success');
-  };
+  // ===== Get unique shift definitions that the worker is assigned to this week =====
+  const myShiftDefs = useMemo(() => {
+    const defIds = [...new Set(myShifts.map(s => s.shiftDefId))];
+    return defIds.map(id => shiftDefs.find(d => d.id === id)).filter(Boolean);
+  }, [myShifts, shiftDefs]);
 
   const handleSelfRemove = (assignmentId) => {
     if (isLocked) { toast('הסידור נעול', 'warning'); return; }
@@ -65,116 +92,93 @@ export default function WorkerPortal() {
     toast('הוסרת מהמשמרת', 'info');
   };
 
-  // ===== New Request System =====
-  
+  // ===== Reservation blocking logic =====
   const toggleBlockDay = (dayIdx) => {
     if (blockedDay === dayIdx) {
-      setBlockedDay(null); // Unblock
+      setBlockedDay(null);
     } else {
-      setBlockedDay(dayIdx); // Block this day (replaces previous, since only 1 allowed)
-      // Remove any preferNot slots on this day since the whole day is now blocked
-      setPreferNot(prev => prev.filter(p => p.dayIdx !== dayIdx));
+      setBlockedDay(dayIdx);
+      setBlockedSlots(prev => prev.filter(p => p.dayIdx !== dayIdx));
     }
   };
 
-  const cycleCellState = (dayIdx, shiftDefId) => {
-    // If day is entirely blocked, ignore individual clicks
+  const cycleCellState = (dayIdx, slotId) => {
     if (blockedDay === dayIdx) return;
-    
-    const isPreferNot = preferNot.some(p => p.dayIdx === dayIdx && p.shiftDefId === shiftDefId);
-    
-    if (isPreferNot) {
-      // Cycle from "prefer not" -> back to "can"
-      setPreferNot(prev => prev.filter(p => !(p.dayIdx === dayIdx && p.shiftDefId === shiftDefId)));
+    const isBlocked = blockedSlots.some(p => p.dayIdx === dayIdx && p.slotId === slotId);
+    if (isBlocked) {
+      setBlockedSlots(prev => prev.filter(p => !(p.dayIdx === dayIdx && p.slotId === slotId)));
     } else {
-      // Cylce from "can" -> "prefer not"
-      if (preferNot.length >= 4) {
-        toast('ניתן לסמן עד 4 משמרות כ"עדיף שלא"', 'warning');
+      if (blockedSlots.length >= MAX_BLOCKED_SLOTS) {
+        toast(`ניתן לחסום עד ${MAX_BLOCKED_SLOTS} משמרות נוספות`, 'warning');
         return;
       }
-      setPreferNot(prev => [...prev, { dayIdx, shiftDefId }]);
+      setBlockedSlots(prev => [...prev, { dayIdx, slotId }]);
     }
+  };
+
+  const getCellState = (dayIdx, slotId) => {
+    if (blockedDay === dayIdx) return 'blocked-day';
+    if (blockedSlots.some(p => p.dayIdx === dayIdx && p.slotId === slotId)) return 'blocked-slot';
+    return 'available';
   };
 
   const handleSubmitRequest = () => {
     setRequestSending(true);
-
+    // Map blocked slots to actual shiftDefIds for admin-side cross-reference
+    const preferNotSlots = blockedSlots.flatMap(s => {
+      const slot = RESERVATION_SLOTS.find(rs => rs.id === s.slotId);
+      if (!slot) return [{ dayIdx: s.dayIdx, slotId: s.slotId }];
+      return slot.shiftDefIds.map(shiftDefId => ({ dayIdx: s.dayIdx, shiftDefId, slotId: s.slotId }));
+    });
     const newReq = {
       id: `req_${Date.now()}`,
       empId: emp.id,
       weekKey,
       blockedDay,
-      preferNotSlots: preferNot,
+      blockedSlots,
+      preferNotSlots,
       comment: requestComment.trim(),
-      requestedQuota: requestedQuota,
-      shiftCount: shiftCount,
+      requestedQuota,
+      reservationSlots: RESERVATION_SLOTS,
+      availableDays,
+      shiftCount,
       timestamp: new Date().toISOString()
     };
-
-    // Replace if already exists for this week
     const existingIdx = state.shiftRequests.findIndex(r => r.empId === emp.id && r.weekKey === weekKey);
     if (existingIdx >= 0) {
       dispatch({ type: 'UPDATE_SHIFT_REQUEST', payload: newReq });
     } else {
       dispatch({ type: 'ADD_SHIFT_REQUEST', payload: newReq });
     }
-
     dispatch({
       type: 'ADD_NOTIFICATION',
       payload: { id: `n${Date.now()}`, text: `${emp.name} שלח/ה בקשת משמרות וזמינות לשבוע ${weekLabel}`, type: 'info', timestamp: new Date().toISOString(), read: false }
     });
-
     setTimeout(() => {
       setRequestSending(false);
       toast('הבקשה השבועית נשלחה למנהל!', 'success');
     }, 600);
   };
 
-  // Check if current user has already submitted a request for this week
   const existingRequest = state.shiftRequests.find(r => r.empId === emp.id && r.weekKey === weekKey);
 
-  // ===== Problem/Note submission =====
+  // ===== Note submission =====
   const handleSendNote = () => {
     if (!noteText.trim()) return;
     setNoteSending(true);
-    const note = {
-      id: `wn${Date.now()}`,
-      empId: emp.id,
-      empName: emp.name,
-      text: noteText.trim(),
-      timestamp: new Date().toISOString(),
-      read: false
-    };
-    dispatch({ type: 'ADD_WORKER_NOTE', payload: note });
-    dispatch({
-      type: 'ADD_NOTIFICATION',
-      payload: { id: `n${Date.now()}`, text: `הודעה מ-${emp.name}: ${noteText.slice(0, 50)}...`, type: 'info', timestamp: new Date().toISOString(), read: false }
-    });
-    setTimeout(() => {
-      setNoteText('');
-      setNoteSending(false);
-      toast('ההודעה נשלחה למנהל!', 'success');
-    }, 600);
+    dispatch({ type: 'ADD_WORKER_NOTE', payload: { id: `wn${Date.now()}`, empId: emp.id, empName: emp.name, text: noteText.trim(), timestamp: new Date().toISOString(), read: false } });
+    dispatch({ type: 'ADD_NOTIFICATION', payload: { id: `n${Date.now()}`, text: `הודעה מ-${emp.name}: ${noteText.slice(0, 50)}...`, type: 'info', timestamp: new Date().toISOString(), read: false } });
+    setTimeout(() => { setNoteText(''); setNoteSending(false); toast('ההודעה נשלחה למנהל!', 'success'); }, 600);
   };
 
   // ===== Swap request =====
   const handleSwapRequest = () => {
     if (!showSwapModal) return;
-    dispatch({
-      type: 'ADD_SWAP_REQUEST',
-      payload: { id: `sr${Date.now()}`, empId: emp.id, fromShiftDefId: showSwapModal.shiftDefId, fromDayIdx: showSwapModal.dayIdx, reason: swapReason, status: 'pending', weekKey, timestamp: new Date().toISOString() }
-    });
+    dispatch({ type: 'ADD_SWAP_REQUEST', payload: { id: `sr${Date.now()}`, empId: emp.id, fromShiftDefId: showSwapModal.shiftDefId, fromDayIdx: showSwapModal.dayIdx, reason: swapReason, status: 'pending', weekKey, timestamp: new Date().toISOString() } });
     dispatch({ type: 'ADD_NOTIFICATION', payload: { id: `n${Date.now()}`, text: `${emp.name} ביקש/ה החלפת משמרת`, type: 'warning', timestamp: new Date().toISOString(), read: false } });
-    setShowSwapModal(null);
-    setSwapReason('');
+    setShowSwapModal(null); setSwapReason('');
     toast('בקשת ההחלפה נשלחה למנהל!', 'success');
   };
-
-  // Weekly schedule by day
-  const scheduleByDay = weekDays.map(day => ({
-    day,
-    shifts: myShifts.filter(s => s.dayIdx === day.idx)
-  }));
 
   return (
     <div className="worker-portal">
@@ -191,29 +195,26 @@ export default function WorkerPortal() {
           </div>
         </div>
         <div className="wp-stats">
-          <div className="wp-stat-card">
+          {/* Shift ratio badge: adminQuota / workerAvailableDays */}
+          <div className="wp-ratio-badge">
+            <span className="wp-ratio-num">{requestedQuota}</span>
+            <span className="wp-ratio-sep">/</span>
+            <span className="wp-ratio-den">{availableDays}</span>
+            <span className="wp-ratio-label">מכסה / ימים זמינים</span>
+          </div>
+          <div className={`wp-stat-card ${shiftCount >= MAX_SHIFTS ? 'stat-done-card' : ''}`}>
             <CalendarCheck size={18} />
             <div className="wp-stat-body">
               <span className="wp-stat-num">{shiftCount}</span>
               <span className="wp-stat-label">משמרות השבוע</span>
             </div>
           </div>
-          <div className={`wp-stat-card ${remaining <= 0 ? 'stat-done-card' : remaining === 1 ? 'stat-warn-card' : ''}`}>
-            <Clock size={18} />
-            <div className="wp-stat-body">
-              <span className={`wp-stat-num ${remaining <= 0 ? 'stat-done' : remaining === 1 ? 'stat-warn' : ''}`}>
-                {remaining > 0 ? remaining : 0}
-              </span>
-              <span className="wp-stat-label">נותרו ממכסה ({emp.quota})</span>
-            </div>
-          </div>
-          {/* Quota progress bar */}
           <div className="wp-quota-bar-wrap">
-            <span className="wp-quota-bar-label">{shiftCount}/{emp.quota}</span>
+            <span className="wp-quota-bar-label">{shiftCount}/{MAX_SHIFTS}</span>
             <div className="wp-quota-track">
               <div
-                className={`wp-quota-fill ${shiftCount >= emp.quota ? 'full' : shiftCount === emp.quota - 1 ? 'near' : ''}`}
-                style={{ width: `${Math.min((shiftCount / emp.quota) * 100, 100)}%` }}
+                className={`wp-quota-fill ${shiftCount >= MAX_SHIFTS ? 'full' : shiftCount === MAX_SHIFTS - 1 ? 'near' : ''}`}
+                style={{ width: `${Math.min((shiftCount / MAX_SHIFTS) * 100, 100)}%` }}
               />
             </div>
           </div>
@@ -239,69 +240,134 @@ export default function WorkerPortal() {
         </button>
       </div>
 
+      {/* ===== TABS ===== */}
+      <div className="wp-tabs">
+        <button
+          className={`wp-tab ${activeTab === 'my-shifts' ? 'active' : ''}`}
+          onClick={() => setActiveTab('my-shifts')}
+        >
+          <CalendarCheck size={16} />
+          <span>המשמרות שלי</span>
+          {shiftCount > 0 && <span className="wp-tab-badge">{shiftCount}</span>}
+        </button>
+        <button
+          className={`wp-tab ${activeTab === 'my-requests' ? 'active' : ''}`}
+          onClick={() => setActiveTab('my-requests')}
+        >
+          <Send size={16} />
+          <span>הבקשות שלי</span>
+          {existingRequest && <span className="wp-tab-badge sent">✓</span>}
+        </button>
+      </div>
+
       {/* ===== TWO-COLUMN LAYOUT ===== */}
       <div className="wp-main-layout">
 
-        {/* LEFT: My schedule + self-assign table */}
+        {/* LEFT: Tab content */}
         <div className="wp-left-col">
 
-          {/* My Current Shifts */}
-          <section className="wp-section">
-            <h3 className="wp-section-title">📅 המשמרות שלי השבוע</h3>
-            <div className="wp-my-shifts-list">
-              {scheduleByDay.every(d => d.shifts.length === 0) && (
+          {/* ====== TAB 1: MY SHIFTS — Week table with only relevant shifts ====== */}
+          {activeTab === 'my-shifts' && (
+            <section className="wp-section">
+              <div className="wp-section-header-row">
+                <h3 className="wp-section-title">📅 המשמרות שלי</h3>
+                <div className="wp-shift-ratio-pill">
+                  <span className="wp-srp-label">מכסה</span>
+                  <span className="wp-srp-num">{requestedQuota}</span>
+                  <span className="wp-srp-sep">/</span>
+                  <span className="wp-srp-den">{availableDays}</span>
+                  <span className="wp-srp-label">ימים</span>
+                </div>
+              </div>
+
+              {myShiftDefs.length === 0 ? (
                 <div className="wp-empty-state">
+                  <CalendarCheck size={32} style={{ opacity: 0.3, marginBottom: 8 }} />
                   <span>לא משובץ/ת לשבוע זה עדיין</span>
+                  <p style={{ fontSize: '0.75rem', marginTop: 4, opacity: 0.6 }}>המנהל ישבץ אותך בקרוב</p>
+                </div>
+              ) : (
+                <div className="wp-self-table-wrapper">
+                  <table className="wp-request-table wp-shifts-table">
+                    <thead>
+                      <tr>
+                        {weekDays.map(d => (
+                          <th key={d.idx} className="wp-req-day-col wp-shifts-day-col">
+                            <span className="wp-th-name">{d.name}</span>
+                            <span className="wp-th-date">{d.date}</span>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        {weekDays.map(day => {
+                          const assignments = myShifts.filter(s => s.dayIdx === day.idx);
+                          return (
+                            <td key={day.idx} className={`wp-req-cell ${assignments.length > 0 ? 'wp-shift-assigned' : ''}`}>
+                              {assignments.length > 0 ? (
+                                <div className="wp-assignments-stack">
+                                  {assignments.map(assignment => {
+                                    const def = shiftDefs.find(d => d.id === assignment.shiftDefId);
+                                    if (!def) return null;
+                                    const info = getShiftForDay(def, day.idx);
+                                    return (
+                                      <div key={assignment.id} className="wp-assigned-chip" style={{ borderColor: def.color }}>
+                                        <div className="wp-ac-name">{info?.name || def.name}</div>
+                                        <div className="wp-ac-hours" style={{ direction: 'ltr', unicodeBidi: 'embed' }}>
+                                          {info?.hours || def.hours}
+                                        </div>
+                                        {!isLocked && (
+                                          <div className="wp-ac-actions">
+                                            <button
+                                              className="wp-ac-swap"
+                                              title="בקשת החלפה"
+                                              onClick={() => setShowSwapModal({ dayIdx: day.idx, shiftDefId: def.id, assignmentId: assignment.id })}
+                                            >
+                                              <ArrowLeftRight size={10} />
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <span className="wp-shift-empty">—</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    </tbody>
+                  </table>
                 </div>
               )}
-              {scheduleByDay.map(({ day, shifts }) => shifts.length > 0 && (
-                <div key={day.idx} className="wp-my-shift-row">
-                  <div className="wp-my-day-label">
-                    <span className="wp-myl-name">{day.name}</span>
-                    <span className="wp-myl-date">{day.date}</span>
-                  </div>
-                  <div className="wp-my-shift-cards">
-                    {shifts.map(s => {
-                      const def = shiftDefs.find(d => d.id === s.shiftDefId);
-                      const info = def ? getShiftForDay(def, day.idx) : null;
-                      return (
-                        <div key={s.id} className="wp-shift-pill" style={{ borderColor: def?.color || '#3b82f6' }}>
-                          <span className="wp-pill-dot" style={{ background: def?.color || '#3b82f6' }} />
-                          <div className="wp-pill-text">
-                            <span className="wp-pill-name">{info?.name || def?.name}</span>
-                            <span className="wp-pill-hours" style={{ direction: 'ltr', unicodeBidi: 'embed' }}>
-                              {info?.hours || def?.hours}
-                            </span>
-                          </div>
-                          {!isLocked && (
-                            <div className="wp-pill-actions">
-                              <button className="wp-mini-btn swap" onClick={() => setShowSwapModal({ dayIdx: day.idx, shiftDefId: s.shiftDefId, assignmentId: s.id })}>
-                                <ArrowLeftRight size={12} /> החלפה
-                              </button>
-                              <button className="wp-mini-btn remove" onClick={() => handleSelfRemove(s.id)}>
-                                ✕
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+
+              {shiftCount >= MAX_SHIFTS && (
+                <div className="wp-quota-reached glass-panel">
+                  <CheckCircle2 size={20} className="wp-qr-icon" />
+                  <div>
+                    <strong>מכסה מלאה!</strong>
+                    <p>{shiftCount} משמרות מתוך {MAX_SHIFTS}</p>
                   </div>
                 </div>
-              ))}
-            </div>
-          </section>
+              )}
+            </section>
+          )}
 
-          {/* Weekly Request Grid */}
-          {!isLocked && (
+          {/* ====== TAB 2: MY REQUESTS — Reservation table 3×7 ====== */}
+          {activeTab === 'my-requests' && (
             <section className="wp-section">
               <div className="wp-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <div>
-                  <h3 className="wp-section-title">בקשות {emp.name}</h3>
-                  <p className="wp-section-desc">סמן זמינות לשבוע. ניתן לחסום יום אחד שלם ועוד 4 משמרות כספציפיות.</p>
+                  <h3 className="wp-section-title">📝 הבקשות שלי</h3>
+                  <p className="wp-section-desc">
+                    מכסת משמרות: {MAX_SHIFTS}. ניתן לחסום יום אחד + עוד {MAX_BLOCKED_SLOTS} משמרות.
+                  </p>
                 </div>
                 <div className="wp-quota-selector">
-                  <span className="wp-qs-label">מספר משמרות:</span>
+                  <span className="wp-qs-label">▼ מספר משמרות:</span>
                   <select className="wp-qs-dropdown" value={requestedQuota} onChange={(e) => setRequestedQuota(Number(e.target.value))}>
                     {[...Array(8)].map((_, i) => (
                       <option key={i} value={i}>{i}</option>
@@ -309,16 +375,18 @@ export default function WorkerPortal() {
                   </select>
                 </div>
               </div>
-              
-              <div className="wp-request-tools" style={{ display: 'none' }}>
-                 <div className="wp-req-counters">
-                   <span className={`wp-counter ${blockedDay !== null ? 'maxed' : ''}`}>
-                     ימים חסומים: {blockedDay !== null ? 1 : 0}/1
-                   </span>
-                   <span className={`wp-counter ${preferNot.length >= 4 ? 'maxed' : ''}`}>
-                     מעדיף לא: {preferNot.length}/4
-                   </span>
-                 </div>
+
+              {/* Blocking counters */}
+              <div className="wp-req-counters">
+                <span className={`wp-counter ${blockedDay !== null ? 'maxed' : ''}`}>
+                  🚫 ימים חסומים: {blockedDay !== null ? 1 : 0}/1
+                </span>
+                <span className={`wp-counter ${blockedSlots.length >= MAX_BLOCKED_SLOTS ? 'maxed' : ''}`}>
+                  ⚠️ משמרות חסומות: {blockedSlots.length}/{MAX_BLOCKED_SLOTS}
+                </span>
+                <span className="wp-counter wp-counter-info">
+                  ✅ זמין/ה: {availableSlots}/{totalSlots}
+                </span>
               </div>
 
               <div className="wp-self-table-wrapper">
@@ -327,8 +395,8 @@ export default function WorkerPortal() {
                     <tr>
                       <th className="wp-req-shift-col">משמרות</th>
                       {weekDays.map(d => (
-                        <th 
-                          key={d.idx} 
+                        <th
+                          key={d.idx}
                           className={`wp-req-day-col ${blockedDay === d.idx ? 'is-blocked-col' : ''}`}
                           onClick={() => toggleBlockDay(d.idx)}
                           title={blockedDay === d.idx ? "בטל חסימת יום" : "חסום יום שלם"}
@@ -343,32 +411,30 @@ export default function WorkerPortal() {
                     </tr>
                   </thead>
                   <tbody>
-                    {eligibleDefs.map(def => (
-                      <tr key={def.id}>
+                    {RESERVATION_SLOTS.map(slot => (
+                      <tr key={slot.id}>
                         <td className="wp-req-shift-label">
-                          <span className="wp-st-dot" style={{ background: def.color }} />
+                          <span className="wp-st-dot" style={{ background: slot.color }} />
                           <div>
-                            <span className="wp-st-name">{def.name}</span>
-                            <span className="wp-st-hours" style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{def.hours}</span>
+                            <span className="wp-st-name">{slot.name}</span>
+                            <span className="wp-st-hours" style={{ direction: 'ltr', unicodeBidi: 'embed' }}>{slot.hours}</span>
                           </div>
                         </td>
                         {weekDays.map(day => {
-                          const info = getShiftForDay(def, day.idx);
-                          const inactive = !info;
-                          const isDayBlocked = blockedDay === day.idx;
-                          const isPreferNot = preferNot.some(p => p.dayIdx === day.idx && p.shiftDefId === def.id);
-
+                          const cellState = getCellState(day.idx, slot.id);
                           return (
-                            <td 
-                              key={day.idx} 
-                              className={`wp-req-cell wp-btn-cell ${inactive ? 'cell-inactive' : ''}`}
-                              onClick={() => { if (!inactive) cycleCellState(day.idx, def.id); }}
+                            <td
+                              key={day.idx}
+                              className="wp-req-cell wp-btn-cell"
+                              onClick={() => cycleCellState(day.idx, slot.id)}
                             >
-                              {!inactive && (
-                                <div className={`wp-req-btn ${isDayBlocked ? 'btn-blocked' : isPreferNot ? 'btn-prefer-not' : 'btn-can'}`}>
-                                  {isDayBlocked ? 'לא יכול/ה' : isPreferNot ? 'עדיף שלא' : 'יכול/ה'}
-                                </div>
-                              )}
+                              <div className={`wp-req-btn ${
+                                cellState === 'blocked-day' ? 'btn-blocked' :
+                                cellState === 'blocked-slot' ? 'btn-prefer-not' :
+                                'btn-can'
+                              }`}>
+                                {cellState === 'available' ? 'יכול/ה' : 'לא יכול/ה'}
+                              </div>
                             </td>
                           );
                         })}
@@ -381,44 +447,59 @@ export default function WorkerPortal() {
               <div className="wp-request-footer glass-panel">
                 <div className="wp-rf-left">
                   <label>הערות נוספות לבקשה:</label>
-                  <input 
-                    type="text" 
-                    placeholder="הקלד כאן בקשות מיוחדות, ימי חופש רחוקים וכו'..." 
+                  <input
+                    type="text"
+                    placeholder="הקלד כאן בקשות מיוחדות, ימי חופש רחוקים וכו'..."
                     value={requestComment}
                     onChange={(e) => setRequestComment(e.target.value)}
                     maxLength={150}
                   />
                 </div>
                 <div className="wp-rf-right">
-                  {existingRequest && <span className="wp-already-sent">✓ בקשה כבר נשלחה לשבוע זה</span>}
-                  <button 
+                  {existingRequest && <span className="wp-already-sent">✓ בקשה נשלחה</span>}
+                  <button
                     className={`btn-primary wp-submit-req-btn ${requestSending ? 'sending' : ''}`}
                     onClick={handleSubmitRequest}
-                    disabled={requestSending}
+                    disabled={requestSending || isLocked}
                   >
-                    <Send size={16} /> 
+                    <Send size={16} />
                     <span>{existingRequest ? 'עדכן בקשה' : 'שלח בקשה שבועית'}</span>
                   </button>
                 </div>
               </div>
-            </section>
-          )}
 
-          {remaining <= 0 && !isLocked && (
-            <div className="wp-quota-reached glass-panel">
-              <CheckCircle2 size={24} className="wp-qr-icon" />
-              <div>
-                <strong>הגעת למכסה השבועית שלך!</strong>
-                <p>שובצת {shiftCount} משמרות מתוך {emp.quota}. כל הכבוד!</p>
-              </div>
-            </div>
+              {/* Swap request history */}
+              {myRequests.length > 0 && (
+                <div style={{ marginTop: 16 }}>
+                  <h4 className="wp-section-title" style={{ fontSize: '0.9rem' }}>📋 היסטוריית בקשות החלפה</h4>
+                  <div className="wp-requests-list">
+                    {myRequests.map(req => {
+                      const def = shiftDefs.find(d => d.id === req.fromShiftDefId);
+                      const dayName = DAY_NAMES[req.fromDayIdx] || '?';
+                      return (
+                        <div key={req.id} className={`wp-request-item status-${req.status}`}>
+                          <div className="wp-req-icon">
+                            {req.status === 'pending' ? '⏳' : req.status === 'approved' ? '✅' : '❌'}
+                          </div>
+                          <div className="wp-req-info">
+                            <span>החלפת {def?.name} ביום {dayName}</span>
+                            {req.reason && <span className="wp-req-reason">{req.reason}</span>}
+                          </div>
+                          <span className="wp-req-status">
+                            {req.status === 'pending' ? 'ממתין' : req.status === 'approved' ? 'אושר' : 'נדחה'}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </section>
           )}
         </div>
 
-        {/* RIGHT: Problem/note box + request history */}
+        {/* RIGHT: Problem/note box */}
         <div className="wp-right-col">
-
-          {/* Problem / Needs Text Box */}
           <section className="wp-section wp-note-section glass-panel">
             <div className="wp-note-header">
               <MessageSquareMore size={20} className="wp-note-icon" />
@@ -447,33 +528,6 @@ export default function WorkerPortal() {
               </button>
             </div>
           </section>
-
-          {/* Request History */}
-          {myRequests.length > 0 && (
-            <section className="wp-section">
-              <h3 className="wp-section-title">📋 היסטוריית בקשות</h3>
-              <div className="wp-requests-list">
-                {myRequests.map(req => {
-                  const def = shiftDefs.find(d => d.id === req.fromShiftDefId);
-                  const dayName = ['ראשון','שני','שלישי','רביעי','חמישי','שישי','שבת'][req.fromDayIdx] || '?';
-                  return (
-                    <div key={req.id} className={`wp-request-item status-${req.status}`}>
-                      <div className="wp-req-icon">
-                        {req.status === 'pending' ? '⏳' : req.status === 'approved' ? '✅' : '❌'}
-                      </div>
-                      <div className="wp-req-info">
-                        <span>החלפת {def?.name} ביום {dayName}</span>
-                        {req.reason && <span className="wp-req-reason">{req.reason}</span>}
-                      </div>
-                      <span className="wp-req-status">
-                        {req.status === 'pending' ? 'ממתין' : req.status === 'approved' ? 'אושר' : 'נדחה'}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
         </div>
       </div>
 
