@@ -41,7 +41,7 @@
   transition: all 0.2s;
   cursor: pointer;
   border: none;
-  font-family: var(--font-body);
+  font-family: Arial, sans-serif !important;
   white-space: nowrap;
 }
 
@@ -80,7 +80,7 @@
   color: var(--text-primary);
   cursor: pointer;
   transition: all 0.2s;
-  font-family: var(--font-body);
+  font-family: Arial, sans-serif !important;
 }
 .btn-lock:hover { background: rgba(255,255,255,0.1); }
 .btn-lock.locked {
@@ -115,7 +115,7 @@
   border: none;
   outline: none;
   color: var(--text-primary);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: Arial, sans-serif !important;
   font-size: 0.75rem;
   width: 100%;
 }
@@ -526,7 +526,7 @@
   justify-content: center;
   transition: all 0.18s;
   flex-shrink: 0;
-  font-family: var(--font-body);
+  font-family: Arial, sans-serif !important;
 }
 .add-btn-inline:hover {
   border-color: var(--accent-primary);
@@ -606,7 +606,7 @@
   background: transparent;
   border: none; outline: none;
   color: var(--text-primary);
-  font-family: var(--font-body);
+  font-family: Arial, sans-serif !important;
   width: 100%;
   font-size: 0.78rem;
 }
@@ -664,7 +664,7 @@
 .def-editor-row input[type="text"], .def-editor-row select {
   flex: 1; padding: 6px 8px;
   background: var(--bg-base); border: 1px solid var(--border-strong);
-  border-radius: 5px; color: var(--text-primary); font-family: var(--font-body); font-size: 0.78rem;
+  border-radius: 5px; color: var(--text-primary); font-family: Arial, sans-serif !important; font-size: 0.78rem;
 }
 .def-editor-row select { max-width: 90px; }
 .def-color-input { width: 32px; height: 32px; border: none; border-radius: 5px; cursor: pointer; padding: 0; }
@@ -773,7 +773,7 @@
     color: #0f172a !important;
     margin: 0 !important;
     font-weight: 900 !important;
-    font-family: 'Arial', sans-serif !important;
+    font-family: Arial, sans-serif !important;
     text-align: center;
   }
   .print-title .print-subtitle {
@@ -782,7 +782,7 @@
     color: #64748b !important;
     margin-top: 2px !important;
     font-weight: 500 !important;
-    font-family: 'Arial', sans-serif !important;
+    font-family: Arial, sans-serif !important;
     text-align: center;
   }
   .print-title .print-logo {
@@ -826,7 +826,7 @@
     color: #fff !important;
     font-size: 14pt !important;
     font-weight: 800 !important;
-    font-family: 'Arial', sans-serif !important;
+    font-family: Arial, sans-serif !important;
   }
   .day-date {
     color: rgba(255,255,255,0.55) !important;
@@ -873,7 +873,7 @@
     font-weight: 900 !important;
     margin-bottom: 0 !important;
     line-height: 1.3 !important;
-    font-family: 'Arial', sans-serif !important;
+    font-family: Arial, sans-serif !important;
     text-shadow: 0 1px 2px rgba(0,0,0,0.2);
   }
   .def-hours {
@@ -918,7 +918,7 @@
     padding: 2px 0 !important;
     white-space: nowrap !important;
     text-align: center;
-    font-family: 'Arial', sans-serif !important;
+    font-family: Arial, sans-serif !important;
   }
 
   /* ── Inactive cells ── */
@@ -944,7 +944,7 @@
     border: none !important;
     margin-top: 3px !important;
     margin-bottom: 0 !important;
-    font-family: 'Arial', sans-serif !important;
+    font-family: Arial, sans-serif !important;
   }
 
   .cell-note-tag { display: none !important; }

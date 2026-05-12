@@ -85,7 +85,7 @@
 .swap-approve, .swap-reject {
   display: flex; align-items: center; gap: 4px;
   padding: 8px 14px; border-radius: 10px; font-size: 0.82rem; font-weight: 600;
-  border: none; cursor: pointer; transition: all 0.25s var(--ease-spring); font-family: var(--font-body);
+  border: none; cursor: pointer; transition: all 0.25s var(--ease-spring); font-family: Arial, sans-serif !important;
 }
 .swap-approve { background: var(--success-bg); color: var(--success); }
 .swap-approve:hover { background: var(--success); color: #fff; transform: scale(1.02); }
@@ -123,7 +123,7 @@
   border: none;
   outline: none;
   color: var(--text-primary);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: Arial, sans-serif !important;
   font-size: 0.85rem;
   width: 100%;
 }
@@ -133,7 +133,7 @@
   border: 1px solid var(--border-subtle);
   border-radius: 10px;
   color: var(--text-primary);
-  font-family: var(--font-body);
+  font-family: Arial, sans-serif !important;
   font-size: 0.85rem;
   cursor: pointer;
   transition: border-color 0.2s;

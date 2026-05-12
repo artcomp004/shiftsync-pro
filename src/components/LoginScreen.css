@@ -223,7 +223,7 @@
   background: var(--bg-base);
   color: var(--text-primary);
   font-size: 0.9rem;
-  font-family: var(--font-body);
+  font-family: Arial, sans-serif !important;
   transition: all 0.25s ease;
   text-align: left;
 }
@@ -461,7 +461,7 @@
   border: 1px solid var(--border-strong);
   background: var(--bg-base);
   color: var(--text-primary);
-  font-family: var(--font-body);
+  font-family: Arial, sans-serif !important;
   font-size: 0.9rem;
   appearance: none;
   transition: all 0.2s;

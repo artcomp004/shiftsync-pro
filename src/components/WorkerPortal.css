@@ -208,7 +208,7 @@
   border: none;
   cursor: pointer;
   transition: all 0.15s;
-  font-family: var(--font-body);
+  font-family: Arial, sans-serif !important;
 }
 .wp-mini-btn.swap { background: rgba(59,130,246,0.1); color: var(--accent-primary); border: 1px solid rgba(59,130,246,0.2); }
 .wp-mini-btn.swap:hover { background: var(--accent-primary); color: #fff; }
@@ -377,7 +377,7 @@
   border-radius: 6px;
   padding: 8px 12px;
   color: var(--text-primary);
-  font-family: var(--font-body);
+  font-family: Arial, sans-serif !important;
 }
 .wp-rf-left input:focus { border-color: var(--accent-primary); outline: none; }
 
@@ -424,7 +424,7 @@
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   color: var(--text-primary);
-  font-family: var(--font-body);
+  font-family: Arial, sans-serif !important;
   font-size: 0.88rem;
   padding: 12px 14px;
   resize: vertical;
@@ -457,7 +457,7 @@
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
-  font-family: var(--font-body);
+  font-family: Arial, sans-serif !important;
 }
 .wp-send-btn:hover:not(:disabled) { box-shadow: var(--shadow-glow); transform: translateY(-1px); }
 .wp-send-btn:disabled { opacity: 0.5; cursor: not-allowed; }
@@ -518,7 +518,7 @@
 .btn-secondary, .btn-primary {
   display: flex; align-items: center; gap: 6px;
   border-radius: 8px; font-weight: 600; font-size: 0.85rem;
-  cursor: pointer; border: none; font-family: var(--font-body);
+  cursor: pointer; border: none; font-family: Arial, sans-serif !important;
   transition: all 0.2s;
 }
 .btn-secondary { background: rgba(255,255,255,0.06); color: var(--text-primary); padding: 8px 16px; border: 1px solid var(--border-subtle); }
@@ -549,7 +549,7 @@
   color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.2s;
-  font-family: var(--font-body);
+  font-family: Arial, sans-serif !important;
 }
 .wp-tab:hover { color: var(--text-primary); background: rgba(255,255,255,0.04); }
 .wp-tab.active {
@@ -596,7 +596,7 @@
   font-weight: 800;
   color: var(--accent-primary);
   line-height: 1;
-  font-family: var(--font-display);
+  font-family: Arial, sans-serif !important;
 }
 .wp-ratio-sep {
   font-size: 1.4rem;
@@ -609,7 +609,7 @@
   font-weight: 800;
   color: var(--success);
   line-height: 1;
-  font-family: var(--font-display);
+  font-family: Arial, sans-serif !important;
 }
 .wp-ratio-label {
   font-size: 0.6rem;
@@ -637,9 +637,9 @@
   border: 1px solid var(--border-subtle);
 }
 .wp-srp-label { font-size: 0.7rem; color: var(--text-tertiary); }
-.wp-srp-num { font-size: 1.2rem; font-weight: 800; color: var(--accent-primary); font-family: var(--font-display); }
+.wp-srp-num { font-size: 1.2rem; font-weight: 800; color: var(--accent-primary); font-family: Arial, sans-serif !important; }
 .wp-srp-sep { font-size: 1rem; color: var(--text-tertiary); margin: 0 1px; }
-.wp-srp-den { font-size: 1.2rem; font-weight: 800; color: var(--success); font-family: var(--font-display); }
+.wp-srp-den { font-size: 1.2rem; font-weight: 800; color: var(--success); font-family: Arial, sans-serif !important; }
 
 /* ===== MY SHIFTS TABLE ===== */
 .wp-shifts-table tbody tr { border-bottom: 1px solid var(--border-subtle); }

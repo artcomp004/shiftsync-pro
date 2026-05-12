@@ -65,7 +65,7 @@
   border: none;
   outline: none;
   color: var(--text-primary);
-  font-family: var(--font-body);
+  font-family: Arial, sans-serif !important;
   font-size: 0.72rem;
   width: 100%;
 }
@@ -264,7 +264,7 @@
   color: var(--accent-primary);
   font-size: 0.75rem;
   cursor: pointer;
-  font-family: var(--font-body);
+  font-family: Arial, sans-serif !important;
   transition: opacity 0.2s;
 }
 .noti-clear:hover {

@@ -41,8 +41,8 @@
   --shadow-glow-sm: 0 0 12px rgba(59, 130, 246, 0.2);
 
   /* Fonts */
-  --font-display: Arial, Helvetica, sans-serif;
-  --font-body: Arial, Helvetica, sans-serif;
+  --font-display: Arial, sans-serif !important;
+  --font-body: Arial, sans-serif !important;
 
   /* Transitions */
   --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
@@ -79,12 +79,12 @@
   box-sizing: border-box;
   margin: 0;
   padding: 0;
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: Arial, sans-serif !important;
 }
 
 body {
   margin: 0;
-  font-family: var(--font-body);
+  font-family: Arial, sans-serif !important;
   background-color: var(--bg-base);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
@@ -94,7 +94,7 @@ body {
 }
 
 h1, h2, h3, h4, h5, h6 {
-  font-family: var(--font-display);
+  font-family: Arial, sans-serif !important;
   font-weight: 700;
   letter-spacing: -0.01em;
   color: var(--text-primary);
@@ -110,7 +110,7 @@ a:hover {
 }
 
 button {
-  font-family: var(--font-body);
+  font-family: Arial, sans-serif !important;
   cursor: pointer;
   border: none;
   outline: none;

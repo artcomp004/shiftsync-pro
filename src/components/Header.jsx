@@ -228,7 +228,7 @@ export default function Header({ mobileMenuOpen, setMobileMenuOpen }) {
               <Settings size={17} />
             </button>
             {showSettingsMenu && (
-              <div className="notification-dropdown glass-panel" style={{ width: '190px' }}>
+              <div className="notification-dropdown glass-panel" style={{ width: '190px', left: 'calc(100% + 8px)', top: '0' }}>
                 <div className="noti-header">
                   <h4>הגדרות מתקדמות</h4>
                 </div>

@@ -845,7 +845,6 @@ export default function ScheduleGrid() {
 
         {/* Grid Body */}
         <div className="grid-shift-body">
-          {mainShifts.length > 0 && <div className="section-label gentle-label"><span>שוטף</span></div>}
           {mainShifts.map(def => renderShiftRow(def, weekDays, weekKey))}
 
           {internetShifts.length > 0 && <div className="section-label internet-section"><span>אינטרנט</span></div>}

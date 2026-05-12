@@ -113,7 +113,7 @@
   position: relative;
   border: none;
   cursor: pointer;
-  font-family: var(--font-body);
+  font-family: Arial, sans-serif !important;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

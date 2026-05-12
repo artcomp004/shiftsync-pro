@@ -73,7 +73,7 @@
   border: 1px solid var(--border-strong);
   border-radius: 10px;
   color: var(--text-primary);
-  font-family: var(--font-body);
+  font-family: Arial, sans-serif !important;
   font-size: 0.9rem;
   transition: border-color 0.2s;
 }
