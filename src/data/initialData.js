@@ -117,7 +117,8 @@ export function getWeekLabel(weekOffset = 0) {
   const fParts = first.date.split('/');
   const lParts = last.date.split('/');
   const month = months[parseInt(lParts[1]) - 1];
-  const year = new Date().getFullYear();
+  // Use actual year from the last day of the week for accuracy at year boundaries
+  const year = last.fullDate.split('-')[0];
   return `${fParts[0]} - ${lParts[0]} ${month} ${year}`;
 }
 

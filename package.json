@@ -7,11 +7,19 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"src/**/*.{js,jsx,css,json}\"",
+    "format:check": "prettier --check \"src/**/*.{js,jsx,css,json}\"",
+    "spell": "cspell \"src/**/*.{js,jsx}\"",
+    "spell:fix": "cspell --issue-template \"{text} => {suggestions}\" \"src/**/*.{js,jsx}\"",
+    "check-all": "npm run lint && npm run format:check && npm run spell",
+    "fix-all": "npm run lint:fix && npm run format",
     "preview": "vite preview"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.104.0",
     "html-to-image": "^1.11.13",
+    "html2canvas": "^1.4.1",
     "lucide-react": "^1.8.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
@@ -21,10 +29,14 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^6.0.1",
+    "cspell": "^10.0.0",
     "eslint": "^9.39.4",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.4.0",
+    "prettier": "^3.8.3",
     "vite": "^8.0.4"
   }
 }

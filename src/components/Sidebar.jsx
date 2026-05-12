@@ -47,32 +47,58 @@ export default function Sidebar({ activeTab, setActiveTab, mobileMenuOpen, setMo
   return (
     <aside className={`sidebar glass-panel ${mobileMenuOpen ? 'mobile-open' : ''}`}>
       <div className="sidebar-header">
-        <div className="logo-container">
-          <div className="logo-icon"></div>
-          <h1>ShiftSync</h1>
+        <div className="header-brand">
+          <div className="header-brand-logo-pills">
+            <div className="pill"></div>
+            <div className="pill"></div>
+          </div>
+          <div className="header-brand-text">
+            <span className="header-brand-line1">משמרות</span>
+          </div>
         </div>
-        <span className="version-badge">Pro</span>
       </div>
 
       <nav className="sidebar-nav">
-        {navItems.map(item => (
-          <button
-            key={item.id}
-            className={`nav-item ${activeTab === item.id ? 'active' : ''}`}
-            onClick={() => handleNav(item.id)}
-          >
-            <item.icon size={20} />
-            <span>{item.label}</span>
-            {item.id === 'chat' && state.chatMessages.length > 0 && (
-              <span className="nav-badge">{state.chatMessages.length > 99 ? '99+' : ''}</span>
-            )}
-          </button>
-        ))}
+        {navItems.map(item => {
+          let badgeCount = 0;
+          if (item.id === 'chat') {
+            // Don't show total message count as a badge — it's misleading
+            badgeCount = 0;
+          }
+          if (item.id === 'admin' && isAdmin) {
+            const unreadNotes = state.workerNotes?.filter(n => !n.read).length || 0;
+            const pendingSwaps = state.swapRequests?.filter(r => r.status === 'pending').length || 0;
+            badgeCount = unreadNotes + pendingSwaps;
+          }
+          if (item.id === 'dashboard' && isAdmin) {
+            const weekRequests = state.shiftRequests?.filter(r => {
+              const d = new Date();
+              d.setDate(d.getDate() - d.getDay() + state.weekOffset * 7);
+              const wk = d.toISOString().split('T')[0];
+              return r.weekKey === wk;
+            }).length || 0;
+            if (weekRequests > 0) badgeCount = weekRequests;
+          }
+
+          return (
+            <button
+              key={item.id}
+              className={`nav-item ${activeTab === item.id ? 'active' : ''}`}
+              onClick={() => handleNav(item.id)}
+            >
+              <item.icon size={16} />
+              <span>{item.label}</span>
+              {badgeCount > 0 && (
+                <span className="nav-badge">{badgeCount > 99 ? '99+' : badgeCount}</span>
+              )}
+            </button>
+          );
+        })}
 
         <div className="nav-divider"></div>
 
         <button className="nav-item" onClick={toggleTheme}>
-          {theme === 'dark' ? <Sun size={20} /> : <Moon size={20} />}
+          {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
           <span>{theme === 'dark' ? 'מצב בהיר' : 'מצב כהה'}</span>
         </button>
 
@@ -80,7 +106,7 @@ export default function Sidebar({ activeTab, setActiveTab, mobileMenuOpen, setMo
           className={`nav-item ${activeTab === 'settings' ? 'active' : ''}`}
           onClick={() => handleNav('settings')}
         >
-          <Settings size={20} />
+          <Settings size={16} />
           <span>הגדרות</span>
         </button>
       </nav>
@@ -94,7 +120,7 @@ export default function Sidebar({ activeTab, setActiveTab, mobileMenuOpen, setMo
           </div>
         </div>
         <button className="logout-btn" onClick={handleLogout} title="התנתק">
-          <LogOut size={18} />
+          <LogOut size={15} />
         </button>
       </div>
     </aside>

@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import ReactDOM from 'react-dom';
 
 export default function Modal({ children, onClose, width = '480px', title }) {
   useEffect(() => {
@@ -7,7 +8,7 @@ export default function Modal({ children, onClose, width = '480px', title }) {
     return () => window.removeEventListener('keydown', handler);
   }, [onClose]);
 
-  return (
+  return ReactDOM.createPortal(
     <div className="modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="modal-content glass-panel" style={{ width, maxWidth: '94vw' }} onClick={e => e.stopPropagation()}>
         {title && (
@@ -18,6 +19,7 @@ export default function Modal({ children, onClose, width = '480px', title }) {
         )}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }

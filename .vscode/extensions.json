@@ -1,0 +1,18 @@
+{
+  "recommendations": [
+    "dbaeumer.vscode-eslint",
+    "esbenp.prettier-vscode",
+    "streetsidesoftware.code-spell-checker",
+    "naumovs.color-highlight",
+    "pranaygp.vscode-css-peek",
+    "zignd.html-css-class-completion",
+    "formulahendry.auto-rename-tag",
+    "eamodio.gitlens",
+    "usernamehw.errorlens",
+    "christian-kohler.path-intellisense",
+    "aaron-bond.better-comments",
+    "rangav.vscode-thunder-client",
+    "mikestead.dotenv",
+    "wallabyjs.console-ninja"
+  ]
+}
